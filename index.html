@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 패널티킥 챔피언십</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&family=Teko:wght@600;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            background-color: #050b14;
+        }
+
+        .font-teko {
+            font-family: 'Teko', sans-serif;
+        }
+
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .glass-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Goal Text Animation */
+        @keyframes popIn {
+            0% { transform: scale(0.3) rotate(-5deg); opacity: 0; }
+            70% { transform: scale(1.1) rotate(2deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .animate-pop {
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* Power bar animation */
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(34, 197, 94, 0.6); }
+            50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.9); }
+        }
+
+        .glow-green {
+            animation: pulseGlow 2s infinite;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen relative text-white flex flex-col justify-between select-none">
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas" class="absolute inset-0 w-full h-full z-0 block cursor-crosshair"></canvas>
+
+    <!-- Top Overlay: HUD Scoreboard -->
+    <header class="relative z-10 p-4 md:p-6 pointer-events-none">
+        <div class="max-w-5xl mx-auto flex justify-between items-start gap-4">
+            
+            <!-- Left Info Panel: Score & Stage -->
+            <div class="glass-panel rounded-2xl p-3 md:p-4 flex items-center gap-4 md:gap-6 pointer-events-auto shadow-2xl">
+                <div>
+                    <div class="text-xs font-bold text-emerald-400 tracking-wider uppercase">점수 (SCORE)</div>
+                    <div id="scoreText" class="text-3xl md:text-5xl font-teko leading-none text-white tracking-wide">0</div>
+                </div>
+                <div class="h-8 w-px bg-white/20"></div>
+                <div>
+                    <div class="text-xs font-bold text-amber-400 tracking-wider uppercase">연속 골 (STREAK)</div>
+                    <div id="streakText" class="text-3xl md:text-5xl font-teko leading-none text-amber-300 tracking-wide">0 🔥</div>
+                </div>
+                <div class="h-8 w-px bg-white/20 hidden sm:block"></div>
+                <div class="hidden sm:block">
+                    <div class="text-xs font-bold text-cyan-400 tracking-wider uppercase">단계 (STAGE)</div>
+                    <div id="stageText" class="text-3xl md:text-5xl font-teko leading-none text-cyan-300 tracking-wide">LV.1</div>
+                </div>
+            </div>
+
+            <!-- Center Ball Indicator -->
+            <div class="glass-panel rounded-2xl px-4 py-3 pointer-events-auto flex items-center gap-2">
+                <span class="text-xs font-bold text-gray-300 mr-1 hidden sm:inline">남은 기회:</span>
+                <div id="ballsContainer" class="flex gap-2 text-amber-400 text-lg md:text-xl">
+                    <i class="fa-solid fa-futbol"></i>
+                    <i class="fa-solid fa-futbol"></i>
+                    <i class="fa-solid fa-futbol"></i>
+                    <i class="fa-solid fa-futbol"></i>
+                    <i class="fa-solid fa-futbol"></i>
+                </div>
+            </div>
+
+            <!-- Right Panel: Audio & High Score -->
+            <div class="glass-panel rounded-2xl p-3 md:p-4 flex items-center gap-3 pointer-events-auto">
+                <div class="text-right hidden sm:block">
+                    <div class="text-xs font-bold text-purple-400 tracking-wider uppercase">최고 점수</div>
+                    <div id="highScoreText" class="text-2xl font-teko leading-none text-purple-200">0</div>
+                </div>
+                <button id="soundToggleBtn" class="glass-btn w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-lg text-white">
+                    <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Middle UI: Shot Feedback Message Banner -->
+    <div id="feedbackBanner" class="absolute inset-x-0 top-1/3 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center justify-center opacity-0 transition-all duration-300">
+        <h1 id="feedbackTitle" class="text-6xl md:text-9xl font-black italic font-teko tracking-wider drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]">
+            GOAL!
+        </h1>
+        <p id="feedbackSubtitle" class="text-xl md:text-2xl font-bold bg-black/60 px-6 py-2 rounded-full border border-white/20 text-emerald-300 shadow-lg">
+            시속 112 km/h • 완벽한 구석!
+        </p>
+    </div>
+
+    <!-- Wind Gauge Indicator -->
+    <div id="windIndicator" class="absolute top-28 left-1/2 -translate-x-1/2 z-10 glass-panel px-4 py-2 rounded-full flex items-center gap-3 pointer-events-none border border-white/10">
+        <span class="text-xs font-bold text-gray-300">바람:</span>
+        <i id="windArrow" class="fa-solid fa-arrow-up text-cyan-400 transition-transform duration-500"></i>
+        <span id="windSpeed" class="text-sm font-bold text-cyan-300">0.0 m/s</span>
+    </div>
+
+    <!-- Bottom Controls Overlay -->
+    <footer class="relative z-10 p-4 md:p-6 pointer-events-none">
+        <div class="max-w-xl mx-auto flex flex-col items-center gap-4">
+            
+            <!-- Curve Selector & Shooting Guide -->
+            <div id="controlsGuide" class="glass-panel px-6 py-3 rounded-2xl pointer-events-auto flex items-center justify-between gap-4 w-full shadow-2xl transition-all duration-300">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-gray-300">스핀 (CURVE):</span>
+                    <div class="flex gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
+                        <button id="curveLeftBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white">
+                            <i class="fa-solid fa-arrow-turn-up -scale-x-100"></i> 좌
+                        </button>
+                        <button id="curveNoneBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-emerald-500 text-white shadow">
+                            직선
+                        </button>
+                        <button id="curveRightBtn" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white">
+                            우 <i class="fa-solid fa-arrow-turn-up"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-right">
+                    <div class="text-xs text-amber-300 font-bold"><i class="fa-solid fa-hand-pointer animate-bounce mr-1"></i>공을 드래그해서 슛!</div>
+                    <div class="text-[10px] text-gray-400">속도와 방향이 드래그에 영향받습니다</div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Start Game Modal Screen -->
+    <div id="startScreen" class="absolute inset-0 z-30 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-3xl p-8 text-center border border-emerald-500/30 shadow-[0_0_50px_rgba(16,185,129,0.2)]">
+            <div class="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-400 text-4xl border border-emerald-500/40 glow-green">
+                <i class="fa-solid fa-futbol"></i>
+            </div>
+            <h1 class="text-4xl font-black tracking-tight text-white mb-2">3D 패널티킥 챔피언십</h1>
+            <p class="text-gray-300 text-sm mb-6 leading-relaxed">
+                골키퍼를 속이고 구석을 노려 득점하세요!<br>
+                드래그 속도로 <span class="text-emerald-400 font-bold">파워</span>를, 드래그 방향으로 <span class="text-emerald-400 font-bold">코스</span>를 조절합니다.
+            </p>
+
+            <div class="bg-white/5 rounded-2xl p-4 mb-6 text-left text-xs text-gray-300 space-y-2 border border-white/10">
+                <div class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-400"></i> 타겟 링 맞추기: <b>+500점 추가</b></div>
+                <div class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-400"></i> 연속 골 (Streak): <b>배점 가산</b></div>
+                <div class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-400"></i> 단계를 거듭할수록 골키퍼의 반응 속도가 빨라집니다.</div>
+            </div>
+
+            <button id="startGameBtn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg hover:shadow-emerald-500/30 transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+                게임 시작하기 <i class="fa-solid fa-play ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Modal Screen -->
+    <div id="gameOverScreen" class="absolute inset-0 z-30 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-panel max-w-md w-full rounded-3xl p-8 text-center border border-red-500/30 shadow-2xl">
+            <div class="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-red-400 text-4xl border border-red-500/40">
+                <i class="fa-solid fa-trophy"></i>
+            </div>
+            <h2 class="text-3xl font-black text-white mb-1">경기 종료!</h2>
+            <p id="gameOverSummary" class="text-gray-400 text-sm mb-6">최종 스코어 결과입니다.</p>
+
+            <!-- Results Grid -->
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+                    <div class="text-xs text-gray-400 font-bold">최종 점수</div>
+                    <div id="finalScore" class="text-3xl font-teko text-emerald-400 leading-none mt-1">0</div>
+                </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+                    <div class="text-xs text-gray-400 font-bold">최대 연속 골</div>
+                    <div id="finalStreak" class="text-3xl font-teko text-amber-400 leading-none mt-1">0</div>
+                </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+                    <div class="text-xs text-gray-400 font-bold">성공률</div>
+                    <div id="finalAccuracy" class="text-3xl font-teko text-cyan-400 leading-none mt-1">0%</div>
+                </div>
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+                    <div class="text-xs text-gray-400 font-bold">최고 속도</div>
+                    <div id="finalTopSpeed" class="text-3xl font-teko text-purple-400 leading-none mt-1">0 km/h</div>
+                </div>
+            </div>
+
+            <button id="restartGameBtn" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-lg shadow-lg transition-all transform hover:-translate-y-0.5">
+                다시 도전하기 <i class="fa-solid fa-rotate-right ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /* Web Audio API Sound Synthesizer */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playKick() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.15);
+                
+                gain.gain.setValueAtTime(1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playWhistle() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(2400, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(2600, this.ctx.currentTime + 0.1);
+                
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.4);
+            }
+
+            playCheer() {
+                if (this.muted || !this.ctx) return;
+                // White noise generator for crowd cheer
+                const bufferSize = this.ctx.sampleRate * 1.2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 1000;
+                filter.Q.value = 1;
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.4, this.ctx.currentTime + 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 1.2);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            playPostHit() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.3);
+
+                gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+
+            playSave() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.2);
+
+                gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State Variables
+        let gameState = 'START'; // START, READY, AIMING, KICKED, RESULT, GAMEOVER
+        let score = 0;
+        let streak = 0;
+        let maxStreak = 0;
+        let stage = 1;
+        let remainingBalls = 5;
+        let totalShots = 0;
+        let totalGoals = 0;
+        let maxSpeedKmh = 0;
+        let highScore = parseInt(localStorage.getItem('pk_high_score') || '0');
+
+        // Spin / Curve Selection
+        let currentCurve = 0; // -1: Left, 0: Straight, 1: Right
+
+        // Wind Variables
+        let wind = { x: 0, y: 0, speed: 0 };
+
+        // Ball Physics Variables
+        let ball = {
+            x: 0,
+            y: 0,
+            z: 0, // Depth from 0 (shooter) to 1 (goal net)
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            radius: 26,
+            rotation: 0,
+            spinX: 0,
+            spinY: 0
+        };
+
+        // Goalkeeper Physics & AI
+        let keeper = {
+            x: 0,
+            y: 0,
+            width: 70,
+            height: 120,
+            targetX: 0,
+            targetY: 0,
+            state: 'IDLE', // IDLE, DIVING, SAVED, MISSED
+            diveSpeed: 0.1,
+            armAngle: 0,
+            gloveLeft: { x: 0, y: 0 },
+            gloveRight: { x: 0, y: 0 }
+        };
+
+        // Goal Post Geometry (Screen coordinates computed dynamically)
+        let goal = {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            postWidth: 14
+        };
+
+        // Target Rings in Goal Corner
+        let targetRing = {
+            x: 0,
+            y: 0,
+            radius: 28,
+            active: false
+        };
+
+        // Drag / Aim Input Tracking
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragCurrent = { x: 0, y: 0 };
+
+        // Particles System
+        let particles = [];
+
+        // Dynamic Resize Handler
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            resetPositions();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function resetPositions() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Define Goal relative size
+            goal.width = Math.min(w * 0.52, 540);
+            goal.height = goal.width * 0.42;
+            goal.x = (w - goal.width) / 2;
+            goal.y = h * 0.28;
+
+            // Ball starting position at bottom center (Penalty Spot)
+            ball.x = w / 2;
+            ball.y = h * 0.82;
+            ball.z = 0;
+            ball.vx = 0;
+            ball.vy = 0;
+            ball.vz = 0;
+            ball.rotation = 0;
+
+            // Goalkeeper Center Position
+            keeper.x = w / 2;
+            keeper.y = goal.y + goal.height - 15;
+            keeper.targetX = keeper.x;
+            keeper.targetY = keeper.y;
+            keeper.state = 'IDLE';
+
+            // Target Ring placement (randomly in top corners)
+            if (Math.random() > 0.4) {
+                targetRing.active = true;
+                const isLeft = Math.random() > 0.5;
+                targetRing.x = isLeft ? goal.x + 50 : goal.x + goal.width - 50;
+                targetRing.y = goal.y + 45;
+            } else {
+                targetRing.active = false;
+            }
+        }
+
+        function generateWind() {
+            // Wind speed increases slightly with higher levels
+            const maxWind = Math.min(2.5, 0.5 + stage * 0.4);
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * maxWind;
+            wind.x = Math.cos(angle) * speed;
+            wind.y = Math.sin(angle) * speed;
+            wind.speed = speed;
+
+            // UI Update
+            const windArrow = document.getElementById('windArrow');
+            const windSpeedText = document.getElementById('windSpeed');
+            const deg = (angle * 180 / Math.PI) + 90;
+            windArrow.style.transform = `rotate(${deg}deg)`;
+            windSpeedText.innerText = `${speed.toFixed(1)} m/s`;
+        }
+
+        function drawStadium() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Night Sky Gradient
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.5);
+            skyGrad.addColorStop(0, '#040914');
+            skyGrad.addColorStop(1, '#0e1a33');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, w, h * 0.5);
+
+            // Stadium Lights / Floodlights Effect
+            const lightX1 = w * 0.15;
+            const lightX2 = w * 0.85;
+            const lightY = h * 0.1;
+
+            [lightX1, lightX2].forEach(lx => {
+                const glow = ctx.createRadialGradient(lx, lightY, 5, lx, lightY, 180);
+                glow.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+                glow.addColorStop(0.3, 'rgba(56, 189, 248, 0.3)');
+                glow.addColorStop(1, 'transparent');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(lx, lightY, 180, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Pitch / Grass Perspective Horizon
+            const horizonY = goal.y - 40;
+            const pitchGrad = ctx.createLinearGradient(0, horizonY, 0, h);
+            pitchGrad.addColorStop(0, '#15803d');
+            pitchGrad.addColorStop(0.3, '#166534');
+            pitchGrad.addColorStop(1, '#052e16');
+            ctx.fillStyle = pitchGrad;
+            ctx.fillRect(0, horizonY, w, h - horizonY);
+
+            // Pitch Mowing Stripes (Perspective Pattern)
+            const stripeCount = 9;
+            for (let i = 0; i < stripeCount; i++) {
+                if (i % 2 === 0) continue;
+                const y1 = horizonY + (i / stripeCount) * (h - horizonY);
+                const y2 = horizonY + ((i + 1) / stripeCount) * (h - horizonY);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+                ctx.fillRect(0, y1, w, y2 - y1);
+            }
+
+            // Penalty Box Lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 3;
+
+            // Goal Line
+            ctx.beginPath();
+            ctx.moveTo(goal.x - 60, goal.y + goal.height);
+            ctx.lineTo(goal.x + goal.width + 60, goal.y + goal.height);
+            ctx.stroke();
+
+            // Penalty Area Perspective Box
+            ctx.beginPath();
+            ctx.moveTo(goal.x - 80, goal.y + goal.height);
+            ctx.lineTo(w * 0.1, h);
+            ctx.moveTo(goal.x + goal.width + 80, goal.y + goal.height);
+            ctx.lineTo(w * 0.9, h);
+            ctx.stroke();
+
+            // Penalty Spot Circle
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(w / 2, h * 0.82, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawGoal() {
+            const gx = goal.x;
+            const gy = goal.y;
+            const gw = goal.width;
+            const gh = goal.height;
+            const pw = goal.postWidth;
+
+            // Goal Net Pattern Background
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 1;
+            const step = 12;
+
+            ctx.beginPath();
+            for (let x = gx; x <= gx + gw; x += step) {
+                ctx.moveTo(x, gy);
+                ctx.lineTo(x, gy + gh);
+            }
+            for (let y = gy; y <= gy + gh; y += step) {
+                ctx.moveTo(gx, y);
+                ctx.lineTo(gx + gw, y);
+            }
+            ctx.stroke();
+
+            // Goal Posts & Crossbar 3D Tube Effect
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Post Shadows
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+            ctx.lineWidth = pw + 4;
+            ctx.beginPath();
+            ctx.moveTo(gx, gy + gh);
+            ctx.lineTo(gx, gy);
+            ctx.lineTo(gx + gw, gy);
+            ctx.lineTo(gx + gw, gy + gh);
+            ctx.stroke();
+
+            // Main White Posts
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = pw;
+            ctx.beginPath();
+            ctx.moveTo(gx, gy + gh);
+            ctx.lineTo(gx, gy);
+            ctx.lineTo(gx + gw, gy);
+            ctx.lineTo(gx + gw, gy + gh);
+            ctx.stroke();
+
+            // Metallic Post Highlights
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = pw / 3;
+            ctx.beginPath();
+            ctx.moveTo(gx + 2, gy + gh);
+            ctx.lineTo(gx + 2, gy + 2);
+            ctx.lineTo(gx + gw - 2, gy + 2);
+            ctx.lineTo(gx + gw - 2, gy + gh);
+            ctx.stroke();
+
+            // Draw Bonus Target Ring if active
+            if (targetRing.active) {
+                ctx.save();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
+                ctx.beginPath();
+                ctx.arc(targetRing.x, targetRing.y, targetRing.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Inner Bullseye
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(targetRing.x, targetRing.y, targetRing.radius * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function drawGoalkeeper() {
+            ctx.save();
+
+            const kx = keeper.x;
+            const ky = keeper.y;
+            const kw = keeper.width;
+            const kh = keeper.height;
+
+            // Shadow on turf
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+            ctx.beginPath();
+            ctx.ellipse(kx, goal.y + goal.height - 5, kw * 0.6, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body Colors (Neon Yellow Goalkeeper Jersey)
+            const jerseyColor = '#eab308';
+            const shortsColor = '#1e293b';
+            const gloveColor = '#38bdf8';
+
+            // Keeper Torso / Body
+            ctx.fillStyle = jerseyColor;
+            ctx.beginPath();
+            ctx.roundRect(kx - kw * 0.3, ky - kh * 0.7, kw * 0.6, kh * 0.4, 8);
+            ctx.fill();
+
+            // Head & Cap
+            ctx.fillStyle = '#fca5a5'; // Skin
+            ctx.beginPath();
+            ctx.arc(kx, ky - kh * 0.8, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Shorts
+            ctx.fillStyle = shortsColor;
+            ctx.beginPath();
+            ctx.roundRect(kx - kw * 0.28, ky - kh * 0.32, kw * 0.56, kh * 0.22, 4);
+            ctx.fill();
+
+            // Legs
+            ctx.fillStyle = '#fca5a5';
+            ctx.fillRect(kx - kw * 0.2, ky - kh * 0.1, 10, kh * 0.3);
+            ctx.fillRect(kx + kw * 0.2 - 10, ky - kh * 0.1, 10, kh * 0.3);
+
+            // Diving Arms Pose Calculation
+            let leftArmX = kx - kw * 0.45;
+            let leftArmY = ky - kh * 0.5;
+            let rightArmX = kx + kw * 0.45;
+            let rightArmY = ky - kh * 0.5;
+
+            if (keeper.state === 'DIVING' || keeper.state === 'SAVED') {
+                const angle = keeper.armAngle;
+                leftArmX += Math.cos(angle) * 35;
+                leftArmY += Math.sin(angle) * 35;
+                rightArmX += Math.cos(angle) * 35;
+                rightArmY += Math.sin(angle) * 35;
+            }
+
+            // Arms (Jerseys sleeves)
+            ctx.strokeStyle = jerseyColor;
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(kx - kw * 0.25, ky - kh * 0.65);
+            ctx.lineTo(leftArmX, leftArmY);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(kx + kw * 0.25, ky - kh * 0.65);
+            ctx.lineTo(rightArmX, rightArmY);
+            ctx.stroke();
+
+            // Gloves (Save collision target points)
+            ctx.fillStyle = gloveColor;
+            ctx.beginPath();
+            ctx.arc(leftArmX, leftArmY, 12, 0, Math.PI * 2);
+            ctx.arc(rightArmX, rightArmY, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Store active glove coordinates for precision collision checking
+            keeper.gloveLeft = { x: leftArmX, y: leftArmY };
+            keeper.gloveRight = { x: rightArmX, y: rightArmY };
+
+            ctx.restore();
+        }
+
+        function drawBall() {
+            ctx.save();
+
+            // Scale ball down as it moves toward the net (3D perspective scaling)
+            const currentScale = 1 - (ball.z * 0.65);
+            const currentRadius = ball.radius * currentScale;
+
+            // Ball Ground Shadow
+            const shadowY = ball.y + (currentRadius * 0.8);
+            const shadowAlpha = Math.max(0.1, 0.5 - ball.z * 0.4);
+            ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+            ctx.beginPath();
+            ctx.ellipse(ball.x, shadowY, currentRadius * 0.9, currentRadius * 0.3, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Soccer Ball Base
+            ctx.translate(ball.x, ball.y);
+            ctx.rotate(ball.rotation);
+
+            const ballGrad = ctx.createRadialGradient(
+                -currentRadius * 0.3, -currentRadius * 0.3, currentRadius * 0.1,
+                0, 0, currentRadius
+            );
+            ballGrad.addColorStop(0, '#ffffff');
+            ballGrad.addColorStop(0.8, '#e2e8f0');
+            ballGrad.addColorStop(1, '#94a3b8');
+
+            ctx.fillStyle = ballGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Soccer Ball Black Pentagram Pattern Details
+            ctx.fillStyle = '#0f172a';
+            const pSize = currentRadius * 0.35;
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * Math.PI * 2 / 5);
+                const px = Math.cos(angle) * (currentRadius * 0.55);
+                const py = Math.sin(angle) * (currentRadius * 0.55);
+
+                ctx.beginPath();
+                ctx.arc(px, py, pSize * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawAimTrajectory() {
+            if (!isDragging || gameState !== 'AIMING') return;
+
+            // Draw line from ball to current drag displacement (Inverted direction like slingshot)
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+
+            // Calculate trajectory target preview
+            const targetX = ball.x + dx * 1.8;
+            const targetY = ball.y + dy * 1.8;
+
+            ctx.save();
+            ctx.setLineDash([8, 8]);
+            ctx.lineWidth = 4;
+            
+            // Color changes based on shot power
+            const dragDist = Math.hypot(dx, dy);
+            const powerRatio = Math.min(1, dragDist / 180);
+            const strokeColor = powerRatio > 0.85 ? '#ef4444' : (powerRatio > 0.4 ? '#38bdf8' : '#22c55e');
+
+            ctx.strokeStyle = strokeColor;
+            ctx.beginPath();
+            ctx.moveTo(ball.x, ball.y);
+
+            // Curve preview arc point
+            const midX = (ball.x + targetX) / 2 + (currentCurve * 40);
+            const midY = (ball.y + targetY) / 2 - 30;
+
+            ctx.quadraticCurveTo(midX, midY, targetX, targetY);
+            ctx.stroke();
+
+            // Target Crosshair Ring
+            ctx.setLineDash([]);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = strokeColor;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.beginPath();
+            ctx.arc(targetX, targetY, 20 * powerRatio + 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function createGoalConfetti() {
+            particles = [];
+            const colors = ['#38bdf8', '#34d399', '#facc15', '#f43f5e', '#a855f7'];
+            for (let i = 0; i < 90; i++) {
+                particles.push({
+                    x: goal.x + Math.random() * goal.width,
+                    y: goal.y + Math.random() * (goal.height * 0.5),
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: Math.random() * -6 - 2,
+                    size: Math.random() * 8 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    life: 1
+                });
+            }
+        }
+
+        function updateAndDrawParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2; // Gravity
+                p.life -= 0.015;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function triggerGoalkeeperDive(ballTargetX, ballTargetY) {
+            keeper.state = 'DIVING';
+
+            // Goalkeeper AI Intelligence: Higher stages lead to smarter predictions
+            const errorMargin = Math.max(20, 120 - stage * 18);
+            const isTricked = Math.random() > (0.4 + stage * 0.08);
+
+            if (isTricked) {
+                // Goalkeeper dives slightly off target
+                keeper.targetX = ballTargetX + (Math.random() - 0.5) * errorMargin;
+                keeper.targetY = ballTargetY + (Math.random() - 0.5) * errorMargin;
+            } else {
+                // Perfect prediction dive
+                keeper.targetX = ballTargetX;
+                keeper.targetY = ballTargetY;
+            }
+
+            // Dive angle arm calculation
+            const dx = keeper.targetX - keeper.x;
+            const dy = keeper.targetY - keeper.y;
+            keeper.armAngle = Math.atan2(dy, dx);
+        }
+
+        function kickBall(dx, dy) {
+            if (gameState !== 'AIMING' && gameState !== 'READY') return;
+
+            const dragDistance = Math.hypot(dx, dy);
+            if (dragDistance < 15) return; // Ignore accidental micro taps
+
+            audio.init();
+            audio.playKick();
+
+            gameState = 'KICKED';
+            totalShots++;
+
+            // Calculate shot power and scale velocity
+            const powerRatio = Math.min(1.4, dragDistance / 140);
+            const speedKmh = Math.round(powerRatio * 95 + Math.random() * 10);
+            if (speedKmh > maxSpeedKmh) maxSpeedKmh = speedKmh;
+
+            // Base Velocity Vectors
+            ball.vx = dx * 0.045 * powerRatio;
+            ball.vy = dy * 0.045 * powerRatio;
+            ball.vz = 0.022 + (powerRatio * 0.008); // Forward z-depth progression rate
+
+            // Apply spin curve force
+            ball.spinX = currentCurve * 1.8;
+
+            // Trigger Goalkeeper Dive AI reaction after short delay
+            const predictedX = ball.x + (ball.vx * 40) + (ball.spinX * 15);
+            const predictedY = ball.y + (ball.vy * 40);
+
+            setTimeout(() => {
+                triggerGoalkeeperDive(predictedX, predictedY);
+            }, Math.max(50, 220 - stage * 25));
+        }
+
+        function updatePhysics() {
+            if (gameState === 'KICKED') {
+                // Move Ball Depth (Z-axis progression from 0 to 1)
+                ball.z += ball.vz;
+
+                // Apply trajectory, spin curves & wind
+                ball.x += ball.vx + (ball.spinX * ball.z * 1.5) + (wind.x * ball.z * 0.8);
+                ball.y += ball.vy + (wind.y * ball.z * 0.8);
+                ball.rotation += 0.15;
+
+                // Move Goalkeeper towards dive target point
+                if (keeper.state === 'DIVING') {
+                    keeper.x += (keeper.targetX - keeper.x) * 0.12;
+                    keeper.y += (keeper.targetY - keeper.y) * 0.12;
+                }
+
+                // Check Collisions when ball reaches Goal Depth (Z >= 0.92)
+                if (ball.z >= 0.92) {
+                    checkShotOutcome();
+                }
+            }
+        }
+
+        function checkShotOutcome() {
+            const bx = ball.x;
+            const by = ball.y;
+
+            // 1. Check Goalkeeper Save Collision (Glove or Body proximity)
+            const distLeftGlove = Math.hypot(bx - keeper.gloveLeft.x, by - keeper.gloveLeft.y);
+            const distRightGlove = Math.hypot(bx - keeper.gloveRight.x, by - keeper.gloveRight.y);
+            const distBody = Math.hypot(bx - keeper.x, by - keeper.y);
+
+            if (distLeftGlove < 38 || distRightGlove < 38 || distBody < 45) {
+                // Saved by Goalkeeper!
+                gameState = 'RESULT';
+                keeper.state = 'SAVED';
+                audio.playSave();
+                showFeedback('SAVED!', '골키퍼 선방!', 'text-amber-400');
+                handleShotEnd(false);
+                return;
+            }
+
+            // 2. Goal Posts & Crossbar Collision Check
+            const gx = goal.x;
+            const gy = goal.y;
+            const gw = goal.width;
+            const gh = goal.height;
+            const pw = goal.postWidth;
+
+            const hitLeftPost = Math.abs(bx - gx) < pw && (by >= gy && by <= gy + gh);
+            const hitRightPost = Math.abs(bx - (gx + gw)) < pw && (by >= gy && by <= gy + gh);
+            const hitCrossbar = Math.abs(by - gy) < pw && (bx >= gx && bx <= gx + gw);
+
+            if (hitLeftPost || hitRightPost || hitCrossbar) {
+                gameState = 'RESULT';
+                audio.playPostHit();
+                // Bounce ball back off post
+                ball.vx *= -0.5;
+                ball.vy *= -0.5;
+                showFeedback('POST!', '골대 맞춤!', 'text-amber-500');
+                handleShotEnd(false);
+                return;
+            }
+
+            // 3. Goal Check (Inside Goal Frame Boundaries)
+            if (bx > gx + pw && bx < gx + gw - pw && by > gy + pw && by < gy + gh) {
+                gameState = 'RESULT';
+                audio.playCheer();
+                createGoalConfetti();
+
+                let bonusPoints = 0;
+                let subText = '환상적인 득점!';
+
+                // Check Target Ring Hit
+                if (targetRing.active) {
+                    const distTarget = Math.hypot(bx - targetRing.x, by - targetRing.y);
+                    if (distTarget < targetRing.radius) {
+                        bonusPoints += 500;
+                        subText = '🎯 정밀 타겟 보너스! (+500점)';
+                    }
+                }
+
+                totalGoals++;
+                streak++;
+                if (streak > maxStreak) maxStreak = streak;
+
+                const shotScore = 1000 + (streak * 200) + bonusPoints;
+                score += shotScore;
+
+                showFeedback('GOAL!', subText, 'text-emerald-400');
+                handleShotEnd(true);
+                return;
+            }
+
+            // 4. Missed Shot (Out of bounds)
+            gameState = 'RESULT';
+            showFeedback('MISS!', '골대 밖으로 빗나감', 'text-rose-500');
+            handleShotEnd(false);
+        }
+
+        function handleShotEnd(isGoal) {
+            if (!isGoal) {
+                streak = 0;
+                remainingBalls--;
+            }
+
+            updateHUD();
+
+            // Next Turn Delay Transition
+            setTimeout(() => {
+                if (remainingBalls <= 0) {
+                    endGame();
+                } else {
+                    if (totalGoals % 3 === 0 && isGoal) {
+                        stage++; // Increase Stage Difficulty
+                    }
+                    nextTurn();
+                }
+            }, 2200);
+        }
+
+        function nextTurn() {
+            gameState = 'READY';
+            hideFeedback();
+            generateWind();
+            resetPositions();
+            audio.playWhistle();
+        }
+
+        function showFeedback(title, subtitle, colorClass) {
+            const banner = document.getElementById('feedbackBanner');
+            const titleEl = document.getElementById('feedbackTitle');
+            const subEl = document.getElementById('feedbackSubtitle');
+
+            titleEl.innerText = title;
+            titleEl.className = `text-6xl md:text-9xl font-black italic font-teko tracking-wider drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)] ${colorClass} animate-pop`;
+            subEl.innerText = subtitle;
+
+            banner.classList.remove('opacity-0');
+            banner.classList.add('opacity-100');
+        }
+
+        function hideFeedback() {
+            const banner = document.getElementById('feedbackBanner');
+            banner.classList.remove('opacity-100');
+            banner.classList.add('opacity-0');
+        }
+
+        function updateHUD() {
+            document.getElementById('scoreText').innerText = score.toLocaleString();
+            document.getElementById('streakText').innerText = `${streak} 🔥`;
+            document.getElementById('stageText').innerText = `LV.${stage}`;
+
+            // Render remaining balls icons
+            const ballsContainer = document.getElementById('ballsContainer');
+            ballsContainer.innerHTML = '';
+            for (let i = 0; i < remainingBalls; i++) {
+                ballsContainer.innerHTML += '<i class="fa-solid fa-futbol"></i>';
+            }
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('pk_high_score', highScore);
+            }
+            document.getElementById('highScoreText').innerText = highScore.toLocaleString();
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            
+            document.getElementById('finalScore').innerText = score.toLocaleString();
+            document.getElementById('finalStreak').innerText = maxStreak;
+            
+            const accuracy = totalShots > 0 ? Math.round((totalGoals / totalShots) * 100) : 0;
+            document.getElementById('finalAccuracy').innerText = `${accuracy}%`;
+            document.getElementById('finalTopSpeed').innerText = `${maxSpeedKmh} km/h`;
+
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        function resetGame() {
+            score = 0;
+            streak = 0;
+            maxStreak = 0;
+            stage = 1;
+            remainingBalls = 5;
+            totalShots = 0;
+            totalGoals = 0;
+            maxSpeedKmh = 0;
+
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('startScreen').classList.add('hidden');
+
+            updateHUD();
+            nextTurn();
+        }
+
+        function getCanvasPoint(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handlePointerDown(e) {
+            if (gameState !== 'READY') return;
+
+            const pt = getCanvasPoint(e);
+            // Check if touch is near ball
+            const distToBall = Math.hypot(pt.x - ball.x, pt.y - ball.y);
+            if (distToBall < 80) {
+                isDragging = true;
+                gameState = 'AIMING';
+                dragStart = pt;
+                dragCurrent = pt;
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!isDragging || gameState !== 'AIMING') return;
+            dragCurrent = getCanvasPoint(e);
+        }
+
+        function handlePointerUp(e) {
+            if (!isDragging || gameState !== 'AIMING') return;
+            isDragging = false;
+
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+            kickBall(dx, dy);
+        }
+
+        // Pointer Event Registration
+        canvas.addEventListener('mousedown', handlePointerDown);
+        canvas.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: true });
+        canvas.addEventListener('touchmove', handlePointerMove, { passive: true });
+        window.addEventListener('touchend', handlePointerUp);
+
+        // UI Curve Buttons Logic
+        const curveLeftBtn = document.getElementById('curveLeftBtn');
+        const curveNoneBtn = document.getElementById('curveNoneBtn');
+        const curveRightBtn = document.getElementById('curveRightBtn');
+
+        function setCurve(val, activeBtn) {
+            currentCurve = val;
+            [curveLeftBtn, curveNoneBtn, curveRightBtn].forEach(btn => {
+                btn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-gray-400 hover:text-white';
+            });
+            activeBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-emerald-500 text-white shadow';
+        }
+
+        curveLeftBtn.addEventListener('click', () => setCurve(-1, curveLeftBtn));
+        curveNoneBtn.addEventListener('click', () => setCurve(0, curveNoneBtn));
+        curveRightBtn.addEventListener('click', () => setCurve(1, curveRightBtn));
+
+        // Audio Toggle
+        document.getElementById('soundToggleBtn').addEventListener('click', () => {
+            audio.muted = !audio.muted;
+            document.getElementById('soundIcon').className = audio.muted ? 'fa-solid fa-volume-xmark text-red-400' : 'fa-solid fa-volume-high';
+        });
+
+        // Start & Restart Buttons
+        document.getElementById('startGameBtn').addEventListener('click', resetGame);
+        document.getElementById('restartGameBtn').addEventListener('click', resetGame);
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw World & Stadium Environment
+            drawStadium();
+
+            // 2. Draw Goal Structure
+            drawGoal();
+
+            // 3. Draw Goalkeeper
+            drawGoalkeeper();
+
+            // 4. Update Physics & Ball position
+            updatePhysics();
+
+            // 5. Draw Soccer Ball
+            drawBall();
+
+            // 6. Draw Aim Guide Trajectory
+            drawAimTrajectory();
+
+            // 7. Update Particles
+            updateAndDrawParticles();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = () => {
+            resizeCanvas();
+            updateHUD();
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
